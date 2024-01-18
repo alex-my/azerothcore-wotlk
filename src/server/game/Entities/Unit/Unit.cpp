@@ -46,7 +46,6 @@
 #include "MovementGenerator.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
-#include "Opcodes.h"
 #include "OutdoorPvP.h"
 #include "PassiveAI.h"
 #include "Pet.h"
@@ -4469,19 +4468,12 @@ void Unit::_ApplyAura(AuraApplication* aurApp, uint8 effMask)
     SpellInfo const* spellInfo = aura->GetSpellInfo();
     if (AuraStateType aState = spellInfo->GetAuraState())
     {
-        if (aState != AURA_STATE_CONFLAGRATE)
-        {
-            // Sting (hunter's pet ability), Faerie Fire (druid versions)
-            if (aState == AURA_STATE_FAERIE_FIRE)
-                aurApp->GetTarget()->RemoveAurasByType(SPELL_AURA_MOD_STEALTH);
-
+        uint32 aStateMask = (1 << (aState - 1));
+        // force update so the new caster registers it
+        if ((aStateMask & PER_CASTER_AURA_STATE_MASK) && HasFlag(UNIT_FIELD_AURASTATE, aStateMask))
+            ForceValuesUpdateAtIndex(UNIT_FIELD_AURASTATE);
+        else
             ModifyAuraState(aState, true);
-        }
-        else if (caster)
-        {
-            ConflagrateAuraStateDelayEvent* pEvent = new ConflagrateAuraStateDelayEvent(this, caster->GetGUID());
-            m_Events.AddEvent(pEvent, m_Events.CalculateTime(700)); // intended 700ms delay before allowing to cast conflagrate
-        }
     }
 
     if (aurApp->GetRemoveMode())
@@ -4576,9 +4568,19 @@ void Unit::_UnapplyAura(AuraApplicationMap::iterator& i, AuraRemoveMode removeMo
             ToTotem()->setDeathState(DeathState::JustDied);
     }
 
-    // Remove aurastates only if were not found
-    if (!auraStateFound)
-        ModifyAuraState(auraState, false);
+    // Remove aurastates only if needed and were not found
+    if (auraState)
+    {
+        if (!auraStateFound)
+            ModifyAuraState(auraState, false);
+        else
+        {
+            // update for casters, some shouldn't 'see' the aura state
+            uint32 aStateMask = (1 << (auraState - 1));
+            if ((aStateMask & PER_CASTER_AURA_STATE_MASK) != 0)
+                ForceValuesUpdateAtIndex(UNIT_FIELD_AURASTATE);
+        }
+    }
 
     aura->HandleAuraSpecificMods(aurApp, caster, false, false);
 
@@ -18543,11 +18545,6 @@ void Unit::SetFeared(bool apply, Unit* fearedBy /*= nullptr*/, bool isFear /*= f
     {
         SetTarget();
         GetMotionMaster()->MoveFleeing(fearedBy, isFear ? 0 : sWorld->getIntConfig(CONFIG_CREATURE_FAMILY_FLEE_DELAY));
-
-        if (GetTypeId() == TYPEID_PLAYER)
-        {
-            sScriptMgr->AnticheatSetSkipOnePacketForASH(ToPlayer(), true);
-        }
     }
     else
     {
@@ -18580,11 +18577,6 @@ void Unit::SetConfused(bool apply)
     {
         SetTarget();
         GetMotionMaster()->MoveConfused();
-
-        if (GetTypeId() == TYPEID_PLAYER)
-        {
-            sScriptMgr->AnticheatSetSkipOnePacketForASH(ToPlayer(), true);
-        }
     }
     else
     {
@@ -19439,7 +19431,6 @@ void Unit::KnockbackFrom(float x, float y, float speedXY, float speedZ)
         if (player->HasAuraType(SPELL_AURA_MOD_INCREASE_MOUNTED_FLIGHT_SPEED) || player->HasAuraType(SPELL_AURA_FLY))
             player->SetCanFly(true, true);
 
-        sScriptMgr->AnticheatSetSkipOnePacketForASH(player, true);
         player->SetCanKnockback(true);
     }
 }
@@ -19898,7 +19889,6 @@ void Unit::EnterVehicle(Unit* base, int8 seatId)
     if (Player* player = ToPlayer())
     {
         sScriptMgr->AnticheatSetUnderACKmount(player);
-        sScriptMgr->AnticheatSetSkipOnePacketForASH(player, true);
     }
 }
 
@@ -19941,7 +19931,6 @@ void Unit::_EnterVehicle(Vehicle* vehicle, int8 seatId, AuraApplication const* a
             return;
 
         sScriptMgr->AnticheatSetUnderACKmount(player);
-        sScriptMgr->AnticheatSetSkipOnePacketForASH(player, true);
 
         InterruptNonMeleeSpells(false);
         player->StopCastingCharm();
@@ -20014,7 +20003,6 @@ void Unit::ExitVehicle(Position const* /*exitPosition*/)
     if (Player* player = ToPlayer())
     {
         sScriptMgr->AnticheatSetUnderACKmount(player);
-        sScriptMgr->AnticheatSetSkipOnePacketForASH(player, true);
     }
 }
 
@@ -20088,7 +20076,6 @@ void Unit::_ExitVehicle(Position const* exitPosition)
         player->SetFallInformation(GameTime::GetGameTime().count(), GetPositionZ());
 
         sScriptMgr->AnticheatSetUnderACKmount(player);
-        sScriptMgr->AnticheatSetSkipOnePacketForASH(player, true);
     }
     else if (HasUnitMovementFlag(MOVEMENTFLAG_ROOT))
     {
@@ -20745,16 +20732,6 @@ int32 Unit::CalculateAOEDamageReduction(int32 damage, uint32 schoolMask, Unit* c
         damage = int32(float(damage) * GetTotalAuraMultiplierByMiscMask(SPELL_AURA_MOD_CREATURE_AOE_DAMAGE_AVOIDANCE, schoolMask));
 
     return damage;
-}
-
-bool ConflagrateAuraStateDelayEvent::Execute(uint64 /*e_time*/, uint32  /*p_time*/)
-{
-    if (m_owner->IsInWorld())
-        if (m_owner->GetAuraEffect(SPELL_AURA_PERIODIC_DAMAGE, SPELLFAMILY_WARLOCK, 0x4, 0, 0, m_casterGUID) || // immolate
-                m_owner->GetAuraEffect(SPELL_AURA_PERIODIC_DAMAGE, SPELLFAMILY_WARLOCK, 0, 0, 0x2, m_casterGUID)) // shadowflame
-            m_owner->ModifyAuraState(AURA_STATE_CONFLAGRATE, true);
-
-    return true;
 }
 
 void Unit::ExecuteDelayedUnitRelocationEvent()

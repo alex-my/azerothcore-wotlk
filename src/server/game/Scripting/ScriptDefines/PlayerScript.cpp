@@ -67,6 +67,14 @@ void ScriptMgr::OnBattlegroundDesertion(Player* player, BattlegroundDesertionTyp
     });
 }
 
+void ScriptMgr::OnPlayerJustDied(Player* player)
+{
+    ExecuteScript<PlayerScript>([&](PlayerScript* script)
+    {
+        script->OnPlayerJustDied(player);
+    });
+}
+
 void ScriptMgr::OnPlayerReleasedGhost(Player* player)
 {
     ExecuteScript<PlayerScript>([&](PlayerScript* script)
@@ -351,6 +359,14 @@ void ScriptMgr::OnPlayerLoadFromDB(Player* player)
     {
         script->OnLoadFromDB(player);
     });
+}
+
+void ScriptMgr::OnBeforePlayerLogout(Player* player)
+{
+    ExecuteScript<PlayerScript>([&](PlayerScript* script)
+        {
+            script->OnBeforeLogout(player);
+        });
 }
 
 void ScriptMgr::OnPlayerLogout(Player* player)
@@ -1620,14 +1636,6 @@ void ScriptMgr::OnQuestAbandon(Player* player, uint32 questId)
 }
 
 // Player anti cheat
-void ScriptMgr::AnticheatSetSkipOnePacketForASH(Player* player, bool apply)
-{
-    ExecuteScript<PlayerScript>([&](PlayerScript* script)
-    {
-        script->AnticheatSetSkipOnePacketForASH(player, apply);
-    });
-}
-
 void ScriptMgr::AnticheatSetCanFlybyServer(Player* player, bool apply)
 {
     ExecuteScript<PlayerScript>([&](PlayerScript* script)

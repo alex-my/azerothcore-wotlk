@@ -297,6 +297,7 @@ public: /* PlayerScript */
     void OnBeforePlayerUpdate(Player* player, uint32 p_time);
     void OnPlayerUpdate(Player* player, uint32 p_time);
     void OnSendInitialPacketsBeforeAddToMap(Player* player, WorldPacket& data);
+    void OnPlayerJustDied(Player* player);
     void OnPlayerReleasedGhost(Player* player);
     void OnPVPKill(Player* killer, Player* killed);
     void OnPlayerPVPFlagChange(Player* player, bool state);
@@ -328,6 +329,7 @@ public: /* PlayerScript */
     void OnPlayerSpellCast(Player* player, Spell* spell, bool skipCheck);
     void OnPlayerLogin(Player* player);
     void OnPlayerLoadFromDB(Player* player);
+    void OnBeforePlayerLogout(Player* player);
     void OnPlayerLogout(Player* player);
     void OnPlayerCreate(Player* player);
     void OnPlayerSave(Player* player);
@@ -455,7 +457,6 @@ public: /* PlayerScript */
     bool OnCanPlayerFlyInZone(Player* player, uint32 mapId, uint32 zoneId, SpellInfo const* bySpell);
 
     // Anti cheat
-    void AnticheatSetSkipOnePacketForASH(Player* player, bool apply);
     void AnticheatSetCanFlybyServer(Player* player, bool apply);
     void AnticheatSetUnderACKmount(Player* player);
     void AnticheatSetRootACKUpd(Player* player);
